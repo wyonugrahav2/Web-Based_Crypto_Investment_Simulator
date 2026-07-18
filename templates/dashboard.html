@@ -1,0 +1,916 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Majalaya Crypto{% endblock %}
+
+{# ============================================================
+   [SESI 4] MACRO REKURSIF -- RENDER THREAD KOMENTAR/BALASAN
+   ala YouTube (komentar bisa saling membalas berlapis lewat parent_id).
+   username_aktif & role_aktif dilewatkan eksplisit sebagai parameter
+   (bukan mengandalkan variabel global template) supaya macro ini tetap
+   aman dipanggil secara rekursif dari dalam dirinya sendiri.
+   ============================================================ #}
+{% macro render_komentar(daftar_komentar, post_id, username_aktif, role_aktif, is_reply=false) %}
+<div class="comment-thread{{ ' comment-thread-reply' if is_reply else '' }}">
+    {% for k in daftar_komentar %}
+    <div class="comment-item" id="commentItem{{ k.id }}">
+        <div class="comment-avatar">{{ k.username[0]|upper }}</div>
+        <div class="comment-body">
+            <p class="comment-meta"><strong>{{ k.username }}</strong> <span class="comment-time">{{ k.timestamp }}</span></p>
+            <p class="comment-text">{{ k.isi_komentar }}</p>
+            <div class="comment-actions">
+                <button type="button" class="comment-reply-btn js-comment-reply-btn" data-comment-id="{{ k.id }}" data-post-id="{{ post_id }}">Balas</button>
+                {% if role_aktif != 'admin' and k.username == username_aktif %}
+                <button type="button" class="comment-delete-btn js-comment-delete-btn" data-comment-id="{{ k.id }}" data-post-id="{{ post_id }}">Hapus</button>
+                {% endif %}
+            </div>
+            <div class="comment-reply-form-wrap" id="replyForm{{ k.id }}" style="display:none;">
+                <form class="feed-comment-form js-feed-comment-form" data-post-id="{{ post_id }}">
+                    <input type="hidden" name="post_id" value="{{ post_id }}">
+                    <input type="hidden" name="parent_id" value="{{ k.id }}">
+                    <textarea name="isi_komentar" rows="1" maxlength="500" placeholder="Balas {{ k.username }}..." required></textarea>
+                    <button type="submit" class="chip-btn primary feed-comment-submit-btn">Balas</button>
+                </form>
+            </div>
+            {% if k.balasan %}
+                {{ render_komentar(k.balasan, post_id, username_aktif, role_aktif, true) }}
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>
+            {% if role == 'admin' %}
+                👑 Master Control Dashboard
+            {% else %}
+                Halo, {{ username }} 👋
+            {% endif %}
+        </h1>
+        <div class="sub">
+            {% if role == 'admin' %}
+                Ringkasan sistem Majalaya Crypto secara keseluruhan
+            {% else %}
+                Berikut ringkasan saldo dan pasar crypto simulasimu hari ini
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ---- TICKER STRIP HARGA KOIN (tetap tampil di semua tab) ---- -->
+<div class="ticker-strip">
+    {% for koin in semua_koin %}
+    <div class="ticker-chip">
+        <span class="coin-icon-wrap">
+            <img class="coin-icon-img"
+                 src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/{{ koin['nama_koin']|lower }}.svg"
+                 alt="{{ koin['nama_koin'] }}"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <span class="coin-dot coin-icon-fallback" style="display:none;">{{ koin['nama_koin'][:1] }}</span>
+        </span>
+        <div>
+            <div class="coin-name">{{ koin['nama_koin'] }}</div>
+            <div class="coin-price ticker-price" data-coin="{{ koin['nama_koin']|lower }}" data-harga="{{ koin['harga_fiktif'] }}">Rp{% if koin['harga_fiktif'] < 1 %}{{ "{:,.4f}".format(koin['harga_fiktif']).replace(",", ".") }}{% else %}{{ "{:,.0f}".format(koin['harga_fiktif']).replace(",", ".") }}{% endif %}</div>
+        </div>
+        <!-- [PART 1] Mini sparkline per koin, digambar oleh dashboard.js via Chart.js -->
+        <canvas class="ticker-sparkline-canvas" data-coin="{{ koin['nama_koin']|lower }}" width="52" height="24" style="margin-left:auto; flex-shrink:0;"></canvas>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- =========================================================
+     TAB: DASHBOARD (default aktif)
+     ========================================================= -->
+<div class="tab-panel active" id="tab-dashboard">
+    <div class="grid">
+
+        <!-- ============================================================
+             [SESI 3] LINE CHART TREN PASAR -- BTC (Highest Volume)
+             ============================================================ -->
+        <div class="col-12 card chart-card">
+            <div class="chart-card-head">
+                <div>
+                    <p class="card-title" style="margin-bottom:2px;" id="chartTrendTitle">📈 Tren Pasar — BTC (Highest Volume)</p>
+                    <p class="balance-sub" style="margin:0;" id="chartTrendSub">Grafik ter-update otomatis setiap kali tombol "Refresh Harga" ditekan.</p>
+                </div>
+                <span class="chart-live-badge"><i class="fa-solid fa-circle"></i> LIVE</span>
+            </div>
+
+            <!-- ============================================================
+                 [SESI 4] BUTTON GROUP PILIH KOIN -- MULTI-COIN LIVE CHART.
+                 [SESI 2 - FINAL UPGRADE] Di-loop otomatis dari koin_tren_list
+                 (bukan hardcode 4 koin lagi) supaya kalau ada koin baru yang
+                 ditambahkan ke KOIN_TERLACAK_HISTORI di app.py, tombolnya
+                 langsung muncul sendiri di sini tanpa perlu sentuh HTML.
+                 Tombol pertama (BTC) otomatis jadi default aktif.
+                 ============================================================ -->
+            <div class="coin-chart-switcher" id="coinChartBtnGroup" style="display:flex; gap:8px; margin:14px 0 4px; flex-wrap:wrap;">
+                {% for kode_koin in koin_tren_list %}
+                <button type="button" class="chip-btn{{ ' primary' if loop.first else '' }} js-coin-chart-btn" data-coin="{{ kode_koin }}">{{ kode_koin }}</button>
+                {% endfor %}
+            </div>
+
+            <div class="chart-canvas-wrap">
+                <canvas id="btcTrendChart"></canvas>
+            </div>
+        </div>
+
+        {% if role == 'admin' %}
+            <!-- ===================== TAMPILAN ADMIN ===================== -->
+            <div class="col-4 card master-card">
+                <p class="card-title">👑 Master Control</p>
+                <div class="stat-row"><span>Total User Terdaftar</span><span class="val" id="statTotalUser">{{ total_user }}</span></div>
+                <div class="stat-row"><span>Total Koin Terdaftar</span><span class="val" id="statTotalKoin">{{ total_koin_terdaftar }}</span></div>
+                <div class="stat-row"><span>Akun Login</span><span class="val">{{ username }}</span></div>
+                <div class="balance-actions">
+                    <a href="{{ url_for('market_refresh') }}" id="refreshHargaBtn" class="chip-btn primary js-refresh-harga">⟳ Refresh Harga</a>
+                </div>
+            </div>
+
+            <div class="col-8 card">
+                <p class="card-title">Data Pasar Crypto Fiktif</p>
+                <table class="coin-table" id="coinTable">
+                    <thead>
+                        <tr><th>Koin</th><th>Harga Fiktif</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for koin in semua_koin %}
+                        <tr class="coin-row" data-coin="{{ koin['nama_koin']|lower }}">
+                            <td class="coin-name-cell">
+                                <span class="coin-icon-wrap coin-icon-wrap-sm">
+                                    <img class="coin-icon-img"
+                                         src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/{{ koin['nama_koin']|lower }}.svg"
+                                         alt="{{ koin['nama_koin'] }}"
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <span class="coin-dot coin-icon-fallback" style="display:none;">{{ koin['nama_koin'][:1] }}</span>
+                                </span>
+                                {{ koin['nama_koin'] }}
+                            </td>
+                            <td class="mono price-cell" data-coin="{{ koin['nama_koin']|lower }}" data-harga="{{ koin['harga_fiktif'] }}">Rp{{ "{:,.2f}".format(koin['harga_fiktif']).replace(",", ".") }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        {% else %}
+            <!-- ===================== TAMPILAN USER ===================== -->
+            <div class="col-4 card">
+                <p class="card-title">Total Saldo</p>
+                <p class="balance-amount" id="saldoAmount">Rp {{ "{:,.0f}".format(saldo_idr).replace(",", ".") }}</p>
+                <p class="balance-sub">Saldo rupiah fiktif hasil gacha awal</p>
+
+                <!-- ============================================================
+                     [SESI 4] INDIKATOR P&L GLOBAL -- warna & panah diatur dinamis
+                     lewat static/js/dashboard.js berdasarkan data-persen di bawah
+                     (hijau/teal + ▲ kalau positif, merah + ▼ kalau negatif).
+                     ============================================================ -->
+                <p class="pnl-indicator" id="pnlIndicator" data-persen="{{ pnl_data.persen }}">
+                    <span class="pnl-arrow" id="pnlArrow"></span>
+                    <span class="pnl-value" id="pnlValue">{{ "%+.2f"|format(pnl_data.persen) }}%</span>
+                    <span class="pnl-label">P&amp;L Global vs modal awal gacha</span>
+                </p>
+
+                <!-- ============================================================
+                     [SESI 4] SPARKLINE MINI -- JEJAK TREN TOTAL KEKAYAAN
+                     (Chart.js, tanpa sumbu/label, murni garis tren mini).
+                     ============================================================ -->
+                <div class="sparkline-wrap">
+                    <canvas id="totalSaldoSparkline" height="40"></canvas>
+                </div>
+
+                <div class="balance-actions">
+                    <a href="#" class="chip-btn primary">Deposit</a>
+                    <a href="#" class="chip-btn">Withdraw</a>
+                </div>
+            </div>
+
+            <div class="col-5 card">
+                <p class="card-title">Asset Allocation</p>
+                {% set colors = ['var(--accent-gold)', 'var(--accent-teal)', '#7c8cf8', '#f2545b', '#a78bfa'] %}
+                {% set ns = namespace(gradient="", start=0) %}
+                {% for item in alokasi_aset %}
+                    {% set end = ns.start + item.persen %}
+                    {% set ns.gradient = ns.gradient + colors[loop.index0 % 5] + " " + ns.start|string + "% " + end|string + "%," %}
+                    {% set ns.start = end %}
+                {% endfor %}
+                <div class="donut-wrap">
+                    <div class="donut" style="background: conic-gradient({{ ns.gradient[:-1] }});">
+                        <div class="donut-hole">
+                            <span class="label">Total</span>
+                            <strong>{{ alokasi_aset|length }} aset</strong>
+                        </div>
+                    </div>
+                    <div class="donut-legend">
+                        {% for item in alokasi_aset %}
+                        <div>
+                            <span class="legend-dot" style="background:{{ colors[loop.index0 % 5] }};"></span>
+                            {{ item.label }} — {{ item.persen }}%
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-3 card">
+                <p class="card-title">⟳ Aksi Pasar</p>
+                <p class="balance-sub">Perbarui harga 10 koin fiktif secara live (BTC/ETH/BNB stabil, SOL/NEAR agresif, DOGE/SHIB liar, USDT flat).</p>
+                <div class="balance-actions">
+                    <a href="{{ url_for('market_refresh') }}" id="refreshHargaBtn" class="chip-btn primary js-refresh-harga">⟳ Refresh Harga</a>
+                </div>
+            </div>
+
+            <div class="col-8 card">
+                <p class="card-title">Data Pasar Crypto (Live Fiktif)</p>
+                <table class="coin-table" id="coinTable">
+                    <thead>
+                        <tr><th>Koin</th><th>Harga Fiktif</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for koin in semua_koin %}
+                        <tr class="coin-row" data-coin="{{ koin['nama_koin']|lower }}">
+                            <td class="coin-name-cell">
+                                <span class="coin-icon-wrap coin-icon-wrap-sm">
+                                    <img class="coin-icon-img"
+                                         src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/{{ koin['nama_koin']|lower }}.svg"
+                                         alt="{{ koin['nama_koin'] }}"
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <span class="coin-dot coin-icon-fallback" style="display:none;">{{ koin['nama_koin'][:1] }}</span>
+                                </span>
+                                {{ koin['nama_koin'] }}
+                            </td>
+                            <td class="mono price-cell" data-coin="{{ koin['nama_koin']|lower }}" data-harga="{{ koin['harga_fiktif'] }}">Rp{{ "{:,.2f}".format(koin['harga_fiktif']).replace(",", ".") }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ============================================================
+                 [SESI 3] QUICK EXCHANGE -- TUKAR KILAT ANTAR KOIN
+                 ============================================================ -->
+            <div class="col-4 card quick-exchange-card">
+                <p class="card-title">⇄ Quick Exchange (Tukar Kilat)</p>
+                <form method="POST" action="{{ url_for('quick_exchange') }}" id="quickExchangeForm">
+                    <div class="qe-box">
+                        <label>Saya punya</label>
+                        <div class="qe-row">
+                            <select name="dari_koin" id="qeDariKoin" class="qe-select">
+                                {% for koin in semua_koin %}
+                                {% set dimiliki_koin = 0 %}
+                                {% for p in portofolio_user %}
+                                    {% if p['nama_koin'] == koin['nama_koin'] %}{% set dimiliki_koin = p['jumlah_koin'] %}{% endif %}
+                                {% endfor %}
+                                <option value="{{ koin['nama_koin'] }}" data-harga="{{ koin['harga_fiktif'] }}" data-owned="{{ '%.8f'|format(dimiliki_koin) }}">{{ koin['nama_koin'] }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="number" name="jumlah_dari" id="qeJumlahDari" class="qe-input" step="any" min="0.00000001" placeholder="0.00000000" required>
+                        </div>
+                        <!-- [PART 1] Slider shortcut alokasi cepat 25/50/75/100% dari sisa saldo koin asal -->
+                        <input type="range" id="qeJumlahDariSlider" class="js-alloc-slider" min="0" max="100" step="25" value="0"
+                               style="width:100%; margin-top:8px; accent-color:var(--accent-gold); cursor:pointer;">
+                        <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-faint); font-family:var(--font-mono); margin-top:2px;">
+                            <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+                        </div>
+                        <p class="owned-hint" id="qeOwnedHint">Sisa saldo koin asal — dimiliki: 0.00000000</p>
+                    </div>
+
+                    <div class="qe-swap-icon"><i class="fa-solid fa-arrow-down-arrow-up"></i></div>
+
+                    <div class="qe-box">
+                        <label>Menjadi</label>
+                        <div class="qe-row">
+                            <select name="ke_koin" id="qeKeKoin" class="qe-select">
+                                {% for koin in semua_koin %}
+                                <option value="{{ koin['nama_koin'] }}" data-harga="{{ koin['harga_fiktif'] }}">{{ koin['nama_koin'] }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" id="qeJumlahKe" class="qe-input" disabled placeholder="0.00000000">
+                        </div>
+                        <p class="owned-hint" id="qeEstimasiNilai">estimasi nilai: Rp0</p>
+                    </div>
+
+                    <button type="submit" class="chip-btn primary qe-submit-btn">
+                        <i class="fa-solid fa-right-left"></i> Exchange
+                    </button>
+                    <p class="trade-hint">*Tukar kilat murni antar koin di portofolio (tidak melalui saldo Rupiah), dihitung instan dari harga live saat ini.</p>
+                </form>
+            </div>
+        {% endif %}
+
+        <!-- ============================================================
+             [SESI 4] SOCIAL TRADING FEED -- shoutout transaksi & performa
+             seluruh user, terlihat oleh SEMUA role (termasuk admin, tapi
+             admin tidak pernah mendapat tombol hapus, lihat aturan di
+             bawah, demi menjaga transparansi rekam jejak performa
+             mahasiswa).
+             ============================================================ -->
+        <div class="col-12 card social-feed-card">
+            <p class="card-title">💬 Social Trading Feed</p>
+            <p class="balance-sub">Update transaksi &amp; shoutout performa komunitas, diambil live dari aktivitas trading seluruh user.</p>
+
+            <div class="social-feed-list">
+                {% for post in social_feed %}
+                <div class="feed-item" id="feedPost{{ post.id }}">
+                    <div class="feed-avatar">{{ post.username[0]|upper }}</div>
+                    <div class="feed-body">
+                        <p class="feed-text">
+                            <strong>{{ post.username }}</strong>
+                            {% if post.tipe_transaksi == 'Beli' %}
+                                baru saja <strong>membeli</strong> {{ "%.8f"|format(post.jumlah_koin) }} <strong>{{ post.nama_koin }}</strong> senilai Rp{{ "{:,.0f}".format(post.nominal_idr).replace(",", ".") }}.
+                            {% elif post.tipe_transaksi == 'Jual' %}
+                                baru saja <strong>menjual</strong> {{ "%.8f"|format(post.jumlah_koin) }} <strong>{{ post.nama_koin }}</strong> seharga Rp{{ "{:,.0f}".format(post.nominal_idr).replace(",", ".") }}.
+                            {% else %}
+                                baru saja <strong>menukar koin</strong> {{ post.nama_koin }} senilai Rp{{ "{:,.0f}".format(post.nominal_idr).replace(",", ".") }}.
+                            {% endif %}
+                            {% if post.pnl_persen is not none %}
+                                <span class="feed-pnl-badge {{ 'pnl-positive' if post.pnl_persen >= 0 else 'pnl-negative' }}">
+                                    {{ "%+.2f"|format(post.pnl_persen) }}% P&amp;L
+                                </span>
+                            {% endif %}
+                        </p>
+                        <p class="feed-time">{{ post.timestamp }}</p>
+
+                        <!-- ================================================
+                             [SESI 4] BARIS INTERAKSI: LIKE & KOMENTAR
+                             (ala YouTube). Jumlah like/komentar dirender
+                             server-side di awal, lalu diperbarui live lewat
+                             AJAX/fetch (lihat static/js/dashboard.js).
+                             ================================================ -->
+                        <div class="feed-interaction-row">
+                            <button type="button"
+                                    class="feed-like-btn js-feed-like-btn{{ ' liked' if post.sudah_like else '' }}"
+                                    data-post-id="{{ post.id }}" title="Suka post ini">
+                                <i class="fa-solid fa-heart"></i>
+                                <span class="feed-like-count">{{ post.total_like }}</span>
+                            </button>
+                            <button type="button" class="feed-comment-toggle-btn js-feed-comment-toggle-btn"
+                                    data-post-id="{{ post.id }}" title="Lihat / tulis komentar">
+                                <i class="fa-regular fa-comment"></i>
+                                <span>{{ post.komentar|length }} Komentar</span>
+                            </button>
+                        </div>
+
+                        <!-- [SESI 4] PANEL KOMENTAR -- toggle terbuka/tutup lewat tombol di atas -->
+                        <div class="feed-comment-panel" id="commentPanel{{ post.id }}" style="display:none;">
+                            <form class="feed-comment-form js-feed-comment-form" data-post-id="{{ post.id }}">
+                                <input type="hidden" name="post_id" value="{{ post.id }}">
+                                <textarea name="isi_komentar" rows="1" maxlength="500" placeholder="Tulis komentar..." required></textarea>
+                                <button type="submit" class="chip-btn primary feed-comment-submit-btn">Kirim</button>
+                            </form>
+                            <div class="feed-comment-list" id="commentList{{ post.id }}">
+                                {{ render_komentar(post.komentar, post.id, username, role) }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================================================
+                         ATURAN HAK HAPUS (Delete Permission):
+                         - USER/GUEST bisa hapus POST MILIK SENDIRI saja.
+                         - ADMIN tidak pernah mendapat tombol hapus sama
+                           sekali (baik post sendiri atau siapapun), demi
+                           transparansi rekam jejak performa mahasiswa.
+                         Backend (/social-feed/hapus/<id>) juga menegakkan
+                         aturan yang sama, jadi ini bukan sekadar kosmetik.
+                         ================================================ -->
+                    {% if role != 'admin' and post.username == username %}
+                    <form method="POST" action="{{ url_for('hapus_post_feed', post_id=post.id) }}"
+                          class="feed-delete-form"
+                          onsubmit="return confirm('Hapus post ini dari Social Trading Feed?');">
+                        <button type="submit" class="feed-delete-btn" title="Hapus Post">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="balance-sub" style="text-align:center; padding:12px 0;">Belum ada aktivitas trading dari siapa pun.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- =========================================================
+     TAB: PORTOFOLIO
+     ========================================================= -->
+<div class="tab-panel" id="tab-portofolio">
+    <div class="grid">
+        {% if role == 'admin' %}
+            <div class="col-12 card">
+                <p class="card-title">◎ Portofolio</p>
+                <p class="balance-sub">Akun admin tidak memiliki portofolio pribadi. Gunakan tab <strong>Kelola User</strong> untuk melihat portofolio seluruh user.</p>
+            </div>
+        {% else %}
+            <div class="col-12 card">
+                <p class="card-title">💼 Portofolio &amp; Trading Simulasi</p>
+
+                <div class="portfolio-table-wrap">
+                    <table class="coin-table">
+                        <thead>
+                            <tr><th>Koin</th><th>Dimiliki (Fraksi)</th><th>Harga Sekarang</th><th>Nilai (Rp)</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for p in portofolio_user %}
+                            <tr class="portfolio-row" data-coin="{{ p['nama_koin']|lower }}" data-jumlah="{{ '%.8f'|format(p['jumlah_koin']) }}">
+                                <td class="coin-name-cell">
+                                    <span class="coin-icon-wrap coin-icon-wrap-sm">
+                                        <img class="coin-icon-img"
+                                             src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/{{ p['nama_koin']|lower }}.svg"
+                                             alt="{{ p['nama_koin'] }}"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <span class="coin-dot coin-icon-fallback" style="display:none;">{{ p['nama_koin'][:1] }}</span>
+                                    </span>
+                                    {{ p['nama_koin'] }}
+                                </td>
+                                <td class="mono">{{ "%.8f"|format(p['jumlah_koin']) }}</td>
+                                <td class="mono">Rp{{ "{:,.2f}".format(p['harga_fiktif']).replace(",", ".") }}</td>
+                                <td class="mono">Rp{{ "{:,.0f}".format(p['nilai_rupiah']).replace(",", ".") }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ---- Toggle Beli / Jual ---- -->
+                <div class="trade-tabs">
+                    <button type="button" class="trade-tab-btn active" data-aksi="beli"><i class="fa-solid fa-cart-plus"></i> Beli</button>
+                    <button type="button" class="trade-tab-btn" data-aksi="jual"><i class="fa-solid fa-money-bill-transfer"></i> Jual</button>
+                </div>
+
+                <form class="trade-form" method="POST" action="{{ url_for('trade') }}" id="tradeForm">
+                    <input type="hidden" name="aksi" id="aksiInput" value="beli">
+                    <div class="trade-form-row">
+                        <div class="field">
+                            <label>Pilih Koin</label>
+                            <select name="nama_koin" id="tradeCoinSelect" required>
+                                {% for koin in semua_koin %}
+                                {% set dimiliki_koin = 0 %}
+                                {% for p in portofolio_user %}
+                                    {% if p['nama_koin'] == koin['nama_koin'] %}
+                                        {% set dimiliki_koin = p['jumlah_koin'] %}
+                                    {% endif %}
+                                {% endfor %}
+                                <option value="{{ koin['nama_koin'] }}" data-owned="{{ '%.8f'|format(dimiliki_koin) }}">{{ koin['nama_koin'] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="field" id="beliField">
+                            <label>Nominal Beli (Rp) — min. Rp{{ "{:,.0f}".format(min_beli_idr).replace(",", ".") }}</label>
+                            <input type="number" name="nominal_beli" id="nominalBeliInput"
+                                   min="{{ min_beli_idr }}" step="1000" placeholder="mis. 50000" required>
+                            <!-- [PART 1] Slider shortcut alokasi cepat 25/50/75/100% dari sisa Saldo Rupiah -->
+                            <input type="range" id="nominalBeliSlider" class="js-alloc-slider" min="0" max="100" step="25" value="0"
+                                   style="width:100%; margin-top:8px; accent-color:var(--accent-gold); cursor:pointer;">
+                            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-faint); font-family:var(--font-mono); margin-top:2px;">
+                                <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+                            </div>
+                            <p class="owned-hint" id="beliSaldoHint" style="margin-top:6px;">Sisa saldo Rupiah: Rp{{ "{:,.0f}".format(saldo_idr or 0).replace(",", ".") }}</p>
+                        </div>
+                        <div class="field" id="jualField" style="display:none;">
+                            <label>Jumlah Koin Dijual <span class="owned-hint" id="ownedHint"></span></label>
+                            <input type="number" name="jumlah_koin" id="jumlahKoinInput"
+                                   step="any" min="0.00000001" placeholder="mis. 0.00012345">
+                            <!-- [PART 1] Slider shortcut alokasi cepat 25/50/75/100% dari sisa fraksi koin dimiliki -->
+                            <input type="range" id="jumlahKoinSlider" class="js-alloc-slider" min="0" max="100" step="25" value="0"
+                                   style="width:100%; margin-top:8px; accent-color:var(--accent-teal); cursor:pointer;">
+                            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-faint); font-family:var(--font-mono); margin-top:2px;">
+                                <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+                            </div>
+                            <p class="owned-hint" id="jualSaldoHint" style="margin-top:6px;">Sisa saldo koin: 0.00000000</p>
+                        </div>
+                        <div class="field trade-actions">
+                            <label>&nbsp;</label>
+                            <div class="trade-btn-row">
+                                <button type="submit" class="chip-btn primary" id="tradeSubmitBtn">
+                                    <i class="fa-solid fa-cart-plus"></i> Proses Beli
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="trade-hint">*Transaksi 100% simulasi fiktif untuk edukasi literasi finansial, bukan aset kripto sungguhan. Jumlah koin hasil pembelian akan berupa pecahan desimal (mis. 0.00012345 BTC) berdasarkan harga live saat transaksi.</p>
+                </form>
+            </div>
+
+            <!-- ============================================================
+                 [SESI 3] BUKU BESAR RIWAYAT TRANSAKSI -- RECENT ACTIVITIES
+                 ============================================================ -->
+            <div class="col-12 card">
+                <p class="card-title">🧾 Recent Activities</p>
+                <div class="portfolio-table-wrap">
+                    <table class="coin-table">
+                        <thead>
+                            <tr>
+                                <th>Koin</th>
+                                <th>Tipe</th>
+                                <th>Nominal Rupiah</th>
+                                <th>Jumlah Fraksi Koin</th>
+                                <th>Waktu</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in riwayat_transaksi %}
+                            <tr>
+                                <td class="coin-name-cell">{{ r['nama_koin'] or '-' }}</td>
+                                <td>
+                                    {% if r['tipe_transaksi'] == 'Beli' %}
+                                        <span class="tipe-tag tipe-beli"><i class="fa-solid fa-cart-plus"></i> Beli</span>
+                                    {% elif r['tipe_transaksi'] == 'Jual' %}
+                                        <span class="tipe-tag tipe-jual"><i class="fa-solid fa-money-bill-transfer"></i> Jual</span>
+                                    {% else %}
+                                        <span class="tipe-tag tipe-tukar"><i class="fa-solid fa-right-left"></i> Tukar</span>
+                                    {% endif %}
+                                </td>
+                                <td class="mono">Rp{{ "{:,.0f}".format(r['nominal_idr']).replace(",", ".") }}</td>
+                                <td class="mono">{{ "%.8f"|format(r['jumlah_koin']) }}</td>
+                                <td class="mono">{{ r['timestamp'] }}</td>
+                                <td><span class="status-badge status-completed">Completed</span></td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" style="text-align:center; color:var(--text-faint);">Belum ada riwayat transaksi.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- =========================================================
+     TAB: PENGATURAN
+     ========================================================= -->
+<div class="tab-panel" id="tab-pengaturan">
+    <div class="grid">
+        {% if role == 'admin' %}
+            <!-- ============================================================
+                 [SESI 3] DEVELOPER OPTIONS (ADMIN MASTER CONTROL)
+                 ============================================================ -->
+            <div class="col-6 card">
+                <p class="card-title">🛠 Developer Options — Global Market Suspend</p>
+                <p class="balance-sub">
+                    Jika diaktifkan, tombol "Refresh Harga" di sisi seluruh user biasa akan
+                    terkunci otomatis dengan status <strong>disuspen</strong>. Admin tetap bisa
+                    me-refresh harga seperti biasa.
+                </p>
+                <div class="dev-status-row">
+                    <span>Status Pasar saat ini:</span>
+                    {% if market_suspended %}
+                        <span class="status-badge status-suspended">DISUSPEND</span>
+                    {% else %}
+                        <span class="status-badge status-completed">NORMAL</span>
+                    {% endif %}
+                </div>
+                <form method="POST" action="{{ url_for('admin_toggle_suspend') }}">
+                    <div class="balance-actions">
+                        <button type="submit" class="chip-btn {{ 'primary' if not market_suspended else 'danger-outline' }}">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            {{ 'Nonaktifkan Suspend' if market_suspended else 'Global Market Suspend' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="col-6 card">
+                <p class="card-title">🛠 Developer Options — Suntik Saldo Massal</p>
+                <p class="balance-sub">
+                    Menambahkan Rp{{ "{:,.0f}".format(nominal_suntik_saldo).replace(",", ".") }}
+                    ke saldo Rupiah SELURUH user terdaftar di database secara instan.
+                </p>
+                <form method="POST" action="{{ url_for('admin_suntik_saldo') }}"
+                      onsubmit="return confirm('Yakin ingin menyuntikkan saldo massal ke SELURUH user terdaftar?');">
+                    <div class="balance-actions">
+                        <button type="submit" class="chip-btn primary">
+                            <i class="fa-solid fa-money-bill-trend-up"></i>
+                            Suntik Saldo Massal Rp{{ "{:,.0f}".format(nominal_suntik_saldo).replace(",", ".") }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        {% else %}
+            <!-- ============================================================
+                 [SESI 4] EDIT PROFIL -- USERNAME, PASSWORD & FOTO PROFIL
+                 ============================================================ -->
+            <div class="col-12 card">
+                <p class="card-title">🧑‍💻 Edit Profil</p>
+                <p class="balance-sub">
+                    Perbarui username, password, dan/atau foto profil kamu. Kolom yang
+                    dikosongkan tidak akan diubah -- kamu bisa isi satu, dua, atau ketiganya sekaligus.
+                </p>
+                <form method="POST" action="{{ url_for('edit_profil') }}" enctype="multipart/form-data">
+                    <div class="trade-form-row">
+                        <div class="field">
+                            <label>Username Baru</label>
+                            <input type="text" name="username_baru" placeholder="{{ username }}" minlength="3">
+                        </div>
+                        <div class="field">
+                            <label>Password Baru</label>
+                            <input type="password" name="password_baru" placeholder="•••• (min. 4 karakter)" minlength="4">
+                        </div>
+                        <div class="field">
+                            <label>Upload Foto Profil</label>
+                            {% if foto_profil %}
+                            <div class="profil-preview-row">
+                                <img src="{{ url_for('static', filename='img/' + foto_profil) }}" alt="Foto profil saat ini" class="profil-preview-avatar">
+                            </div>
+                            {% endif %}
+                            <input type="file" name="foto_profil" accept=".png,.jpg,.jpeg,.gif,.webp">
+                        </div>
+                    </div>
+                    <div class="balance-actions">
+                        <button type="submit" class="chip-btn primary">
+                            <i class="fa-solid fa-user-pen"></i> Simpan Perubahan Profil
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="col-6 card">
+                <p class="card-title">🎲 Reset Akun</p>
+                <p class="balance-sub">
+                    Reset saldo Rupiah kamu (undi ulang gacha saldo awal) dan kosongkan seluruh
+                    portofolio koin ke 0. Tindakan ini <strong>tidak bisa dibatalkan</strong>.
+                </p>
+                <form method="POST" action="{{ url_for('reset_akun') }}"
+                      onsubmit="return confirm('Yakin ingin mereset akun? Saldo akan diundi ulang dan seluruh koin akan hilang.');">
+                    <div class="balance-actions">
+                        <button type="submit" class="chip-btn danger-outline">
+                            <i class="fa-solid fa-arrows-rotate"></i> Reset Akun &amp; Ulangi Gacha Saldo
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="col-6 card">
+                <p class="card-title">👤 Info Akun</p>
+                <div class="stat-row"><span>Username</span><span class="val">{{ username }}</span></div>
+                <div class="stat-row"><span>Role</span><span class="val">{{ role|upper }}</span></div>
+                <div class="stat-row"><span>Saldo Saat Ini</span><span class="val">Rp{{ "{:,.0f}".format(saldo_idr).replace(",", ".") }}</span></div>
+            </div>
+
+            <!-- ============================================================
+                 [SESI 3] MODE VOLATILITAS PASAR (USER)
+                 ============================================================ -->
+            <div class="col-6 card">
+                <p class="card-title">🌪 Mode Volatilitas Pasar</p>
+                <p class="balance-sub">
+                    Atur intensitas keliaran fluktuasi harga pasar setiap kali tombol
+                    "Refresh Harga" ditekan. Mode saat ini:
+                    <strong>{{ volatilitas_aktif|upper }}</strong>.
+                </p>
+                <form method="POST" action="{{ url_for('set_volatilitas') }}">
+                    <div class="field">
+                        <label>Pilih Mode Volatilitas</label>
+                        <select name="mode_volatilitas">
+                            {% for mode in konfig_volatilitas %}
+                            <option value="{{ mode }}" {{ 'selected' if mode == volatilitas_aktif else '' }}>{{ mode|capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="balance-actions">
+                        <button type="submit" class="chip-btn primary">
+                            <i class="fa-solid fa-sliders"></i> Simpan Mode Volatilitas
+                        </button>
+                    </div>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if role == 'admin' %}
+<!-- =========================================================
+     TAB ADMIN: MASTER CONTROL
+     ========================================================= -->
+<div class="tab-panel" id="tab-admin-master">
+    <div class="grid">
+        <div class="col-4 card master-card">
+            <p class="card-title">👑 Master Control</p>
+            <div class="stat-row"><span>Total User Terdaftar</span><span class="val" id="statTotalUser2">{{ total_user }}</span></div>
+            <div class="stat-row"><span>Total Koin Terdaftar</span><span class="val" id="statTotalKoin2">{{ total_koin_terdaftar }}</span></div>
+            <div class="stat-row"><span>Akun Login</span><span class="val">{{ username }}</span></div>
+            <div class="balance-actions">
+                <button type="button" class="chip-btn primary" id="refreshRingkasanBtn">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh Ringkasan
+                </button>
+                <a href="{{ url_for('market_refresh') }}" class="chip-btn js-refresh-harga">⟳ Refresh Harga</a>
+            </div>
+        </div>
+        <div class="col-8 card">
+            <p class="card-title">Ringkasan Sistem</p>
+            <p class="balance-sub">
+                Master Control menampilkan ringkasan jumlah user terdaftar dan jumlah koin yang
+                terdaftar di pasar secara real-time. Tekan tombol "Refresh Ringkasan" untuk
+                memperbarui angka tanpa reload halaman.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     TAB ADMIN: KELOLA USER
+     ========================================================= -->
+<div class="tab-panel" id="tab-admin-user">
+    <div class="grid">
+        <div class="col-12 card">
+            <p class="card-title">👤 Kelola User ({{ semua_user|length }} akun)</p>
+            <table class="coin-table">
+                <thead>
+                    <tr><th>ID</th><th>Username</th><th>Role</th><th>Saldo IDR</th><th>Total Koin Dimiliki</th></tr>
+                </thead>
+                <tbody>
+                    {% for u in semua_user %}
+                    <tr>
+                        <td class="mono">{{ u['id'] }}</td>
+                        <td>{{ u['username'] }}</td>
+                        <td><span class="role-tag {{ 'role-tag-user' if u['role'] != 'admin' else '' }}">{{ u['role']|upper }}</span></td>
+                        <td class="mono">Rp{{ "{:,.0f}".format(u['saldo_idr']).replace(",", ".") }}</td>
+                        <td class="mono">{{ "%.8f"|format(u['total_koin_dimiliki']) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     TAB ADMIN: KELOLA KOIN
+     ========================================================= -->
+<div class="tab-panel" id="tab-admin-koin">
+    <div class="grid">
+        <div class="col-12 card">
+            <p class="card-title">🪙 Kelola Koin — Data Pasar Crypto Fiktif</p>
+            <div class="balance-actions" style="margin-bottom:16px;">
+                <a href="{{ url_for('market_refresh') }}" class="chip-btn primary js-refresh-harga">⟳ Refresh Harga</a>
+            </div>
+            <table class="coin-table">
+                <thead>
+                    <tr><th>Koin</th><th>Harga Fiktif</th></tr>
+                </thead>
+                <tbody>
+                    {% for koin in semua_koin %}
+                    <tr class="coin-row" data-coin="{{ koin['nama_koin']|lower }}">
+                        <td class="coin-name-cell">
+                            <span class="coin-icon-wrap coin-icon-wrap-sm">
+                                <img class="coin-icon-img"
+                                     src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/{{ koin['nama_koin']|lower }}.svg"
+                                     alt="{{ koin['nama_koin'] }}"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <span class="coin-dot coin-icon-fallback" style="display:none;">{{ koin['nama_koin'][:1] }}</span>
+                            </span>
+                            {{ koin['nama_koin'] }}
+                        </td>
+                        <td class="mono price-cell" data-coin="{{ koin['nama_koin']|lower }}" data-harga="{{ koin['harga_fiktif'] }}">Rp{{ "{:,.2f}".format(koin['harga_fiktif']).replace(",", ".") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- =========================================================
+     [PART 1] TAB: CONTACT (✉️) -- info kontak developer di kiri,
+     form "Kirim Pesan" untuk Guest/User di kanan. Murni front-end;
+     submit ditangani simulasi AJAX oleh static/js/dashboard.js
+     (belum ada endpoint backend khusus).
+     ========================================================= -->
+<div class="tab-panel" id="tab-contact">
+    <div class="grid">
+        <div class="col-5 card">
+            <p class="card-title">✉️ Informasi Kontak</p>
+            <p class="balance-sub">Ada pertanyaan, masukan, atau laporan bug seputar Majalaya Crypto? Hubungi developer lewat kanal di bawah ini.</p>
+            <div class="stat-row"><span>Nama Developer</span><span class="val">Tim Majalaya Crypto</span></div>
+            <div class="stat-row"><span>Email</span><span class="val">dev.majalayacrypto@gmail.com</span></div>
+            <div class="stat-row"><span>Telepon / WhatsApp</span><span class="val">+62 812-3456-7890</span></div>
+            <div class="stat-row"><span>Alamat</span><span class="val">Majalaya, Bandung, Jawa Barat</span></div>
+            <div class="stat-row"><span>Jam Operasional</span><span class="val">Senin—Jumat, 09.00—17.00 WIB</span></div>
+            <p class="trade-hint" style="margin-top:14px;">*Aplikasi ini adalah simulasi edukasi literasi finansial, bukan platform trading sungguhan.</p>
+        </div>
+
+        <div class="col-7 card">
+            <p class="card-title">📨 Kirim Pesan</p>
+            <p class="balance-sub">Isi form di bawah untuk mengirim pesan langsung ke developer (tersedia untuk Guest maupun User yang sudah login).</p>
+            <form id="contactMessageForm">
+                <div class="trade-form-row" style="grid-template-columns:1fr 1fr;">
+                    <div class="field">
+                        <label>Nama</label>
+                        <input type="text" name="nama_pengirim" id="contactNama" placeholder="Nama kamu" required>
+                    </div>
+                    <div class="field">
+                        <label>Email</label>
+                        <input type="email" name="email_pengirim" id="contactEmail" placeholder="nama@email.com" required>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Teks Pesan</label>
+                    <textarea name="isi_pesan" id="contactPesan" rows="5" maxlength="1000" required
+                              placeholder="Tulis pesan, pertanyaan, atau masukanmu di sini..."
+                              style="width:100%; resize:vertical; background:var(--bg-panel-alt); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text-primary); font-family:inherit; font-size:13px;"></textarea>
+                </div>
+                <div class="balance-actions">
+                    <button type="submit" class="chip-btn primary" id="contactSubmitBtn">
+                        <i class="fa-solid fa-paper-plane"></i> Kirim Pesan
+                    </button>
+                </div>
+                <p class="trade-hint" id="contactFormHint">*Pesan akan tercatat untuk tim developer. Balasan biasanya dalam 1x24 jam kerja.</p>
+            </form>
+        </div>
+    </div>
+
+    {% if role == 'admin' %}
+    <!-- =========================================================
+         [FITUR BARU] WIDGET "KOTAK MASUK PESAN (ADMIN ONLY)" --
+         hanya dirender kalau role == 'admin'. Datanya (`messages`)
+         dikirim dari route dashboard() di app.py lewat query
+         SELECT * FROM contact_messages ORDER BY id DESC.
+         ========================================================= -->
+    <div class="grid" style="margin-top:20px;">
+        <div class="col-12 card" id="contactInboxCard">
+            <p class="card-title">📬 Kotak Masuk Pesan (Admin Only)</p>
+            <p class="balance-sub">Seluruh pesan yang masuk lewat form "Kirim Pesan" dari Guest maupun User, urut dari yang terbaru.</p>
+            <div class="balance-actions" style="margin-bottom:16px;">
+                <a href="{{ url_for('ekspor_pesan_kontak_csv') }}" class="chip-btn js-ekspor-csv" id="contactEksporCsvBtn"
+                   style="background:linear-gradient(135deg, var(--accent-teal), #0f8a7c); color:#04211d; border-color:var(--accent-teal);">
+                    <span class="js-ekspor-csv-label"><i class="fa-solid fa-file-csv"></i> Ekspor Data Pesan (CSV)</span>
+                </a>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="coin-table" id="contactInboxTable">
+                    <thead>
+                        <tr>
+                            <th>No</th>
+                            <th>Nama Pengirim</th>
+                            <th>Email</th>
+                            <th>Isi Pesan</th>
+                            <th>Waktu Kirim</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contactInboxTbody">
+                        {% for msg in messages %}
+                        <tr data-msg-id="{{ msg['id'] }}">
+                            <td class="mono">{{ loop.index }}</td>
+                            <td>{{ msg['nama_pengirim'] }}{% if msg['username_pengirim'] %} <span class="role-tag role-tag-user">{{ msg['username_pengirim'] }}</span>{% endif %}</td>
+                            <td class="mono">{{ msg['email_pengirim'] }}</td>
+                            <td style="max-width:320px; white-space:normal;">{{ msg['isi_pesan'] }}</td>
+                            <td class="mono">{{ msg['timestamp'] }}</td>
+                            <td>
+                                <button type="button"
+                                        class="chip-btn danger-outline js-contact-hapus-btn"
+                                        data-msg-id="{{ msg['id'] }}">
+                                    <i class="fa-solid fa-trash"></i> Hapus
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr id="contactInboxEmptyRow">
+                            <td colspan="6" style="text-align:center; color:var(--text-secondary);">Belum ada pesan masuk.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // [DISTRIBUSI KODE] Satu-satunya data yang masih dikirim lewat Jinja ke
+    // sisi client: konfigurasi URL endpoint (bukan logika), dibaca oleh
+    // static/js/dashboard.js lewat window.APP_CONFIG.
+    window.APP_CONFIG = {
+        role: "{{ role }}",
+        username: "{{ username }}",
+        // [PART 1] Sisa saldo Rupiah user, dipakai slider alokasi cepat form Beli
+        saldoIdr: {{ saldo_idr or 0 }},
+        urls: {
+            login: "{{ url_for('login') }}",
+            apiRefreshHarga: "{{ url_for('api_refresh_harga') }}",
+            apiAdminRingkasan: "{{ url_for('api_admin_ringkasan') }}",
+            apiMarketHistory: "{{ url_for('api_market_history') }}",
+            apiFeedLike: "{{ url_for('toggle_like_feed', post_id=0) }}".replace(/0$/, ''),
+            apiFeedKomentar: "{{ url_for('tambah_komentar_feed') }}",
+            apiFeedHapusKomentar: "{{ url_for('hapus_komentar_feed', comment_id=0) }}".replace(/0$/, ''),
+            // [FITUR BARU] Widget "Kotak Masuk Pesan (Admin Only)" di tab Contact
+            apiContactHapus: "{{ url_for('hapus_pesan_kontak', id=0) }}".replace(/0$/, ''),
+            apiContactEksporCsv: "{{ url_for('ekspor_pesan_kontak_csv') }}"
+        },
+        // [SESI 4] Data jejak nilai total kekayaan (sparkline widget Total Saldo),
+        // dihitung server-side lewat hitung_riwayat_nilai_portofolio() di app.py.
+        sparklineData: {{ (sparkline_json if sparkline_json else '[]')|safe }}
+    };
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

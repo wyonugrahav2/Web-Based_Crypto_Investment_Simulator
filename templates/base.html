@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Majalaya Crypto{% endblock %}</title>
+
+    <!-- ================= CDN: GOOGLE FONTS ================= -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+    <!-- ================= CDN: FONTAWESOME =================
+         [SESI 3 UPDATE] Ikon UI tambahan (reset akun, panel admin, tombol
+         refresh) -- dipasang berdampingan dengan ikon unicode lama yang
+         tetap dipertahankan, bukan menggantikannya. -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- ================= STYLESHEET INTERNAL ================= -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <!-- ================= CDN: CHART.JS =================
+         [SESI 3 MEGA UPDATE] Dipakai untuk Line Chart tren harga koin. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+    <!-- ================= LOADING SCREEN (SESI 3) =================
+         Muncul otomatis saat halaman ini pertama kali dimuat, dan akan
+         dipanggil ulang lewat JS setiap kali user berpindah halaman
+         (login, refresh market, dsb) atau menekan tombol "Refresh Harga". -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-box">
+            <div class="loading-logo">M</div>
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Memuat Majalaya Crypto...</div>
+        </div>
+    </div>
+
+    <div class="flash-stack" id="flashStack">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+    </div>
+
+    <div class="shell" id="appShell">
+
+        <!-- ================= SIDEBAR ================= -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="mark">M</div>
+                <div class="name">Majalaya Crypto</div>
+            </div>
+
+            <div class="sidebar-section-label">Menu Utama</div>
+            <a href="#" class="nav-item active" data-tab="dashboard">
+                <span class="icon">▦</span><span class="label">Dashboard</span>
+            </a>
+            <a href="{{ url_for('market_refresh') }}" class="nav-item">
+                <span class="icon">⟳</span><span class="label">Refresh Market</span>
+            </a>
+            <a href="#" class="nav-item" data-tab="portofolio">
+                <span class="icon">◎</span><span class="label">Portofolio</span>
+            </a>
+            <a href="#" class="nav-item" data-tab="pengaturan">
+                <span class="icon">⚙</span><span class="label">Pengaturan</span>
+            </a>
+
+            {# ===== BAGIAN INI HANYA MUNCUL UNTUK ROLE ADMIN ===== #}
+            {% if role == 'admin' %}
+            <div class="sidebar-section-label">Admin Area</div>
+            <a href="#" class="nav-item nav-item-admin" data-tab="admin-master">
+                <span class="icon">👑</span><span class="label">MASTER CONTROL</span>
+            </a>
+            <a href="#" class="nav-item nav-item-admin" data-tab="admin-user">
+                <span class="icon">👤</span><span class="label">Kelola User</span>
+            </a>
+            <a href="#" class="nav-item nav-item-admin" data-tab="admin-koin">
+                <span class="icon">🪙</span><span class="label">Kelola Koin</span>
+            </a>
+            {% endif %}
+        </aside>
+
+        <!-- ================= MAIN AREA ================= -->
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+
+            <!-- ---- TOP NAVBAR ----
+                 [FIX KONSISTENSI VISUAL] Dropdown profil di bawah ini SELALU
+                 dirender untuk SEMUA role (admin & user biasa) -- tidak
+                 dibungkus kondisi role apapun -- karena `username` dan
+                 `role` sekarang dikirim eksplisit & konsisten dari SETIAP
+                 cabang route /dashboard di app.py. -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button class="icon-btn" id="sidebarToggleBtn" title="Toggle sidebar">☰</button>
+
+                    <div class="search-box">
+                        <span>🔍</span>
+                        <input type="text" id="coinSearchInput" placeholder="Cari koin di tabel bawah...">
+                    </div>
+                </div>
+
+                <div class="topbar-right">
+                    <div class="icon-btn-wrap">
+                        <button class="icon-btn" title="Inbox / Notifikasi">✉</button>
+                        <span class="notif-dot"></span>
+                    </div>
+
+                    <!-- Dropdown Profil: PATEN untuk semua role -->
+                    <div class="profile-dd">
+                        <button class="profile-trigger" id="profileTrigger">
+                            <span class="profile-avatar">
+                                {% if foto_profil %}
+                                    <img src="{{ url_for('static', filename='img/' + foto_profil) }}" alt="{{ username }}" class="profile-avatar-img">
+                                {% else %}
+                                    {{ (username[0] if username else "?")|upper }}
+                                {% endif %}
+                            </span>
+                            <span class="profile-name">{{ username }}</span>
+                            {% if role == 'admin' %}
+                                <span class="role-tag">ADMIN</span>
+                            {% else %}
+                                <span class="role-tag role-tag-user">USER</span>
+                            {% endif %}
+                            <span>▾</span>
+                        </button>
+                        <div class="dropdown-menu-custom" id="profileDropdown">
+                            <a href="{{ url_for('logout') }}" class="danger">🔴 Logout</a>
+                            <a href="{{ url_for('switch_login', mode='admin') }}" class="gold">🔑 Switch to Admin Login</a>
+                            <a href="{{ url_for('switch_login', mode='user') }}">👥 Switch to User/Guest Login</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- ---- CONTENT (diisi oleh template anak) ---- -->
+            <main class="content">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login - Majalaya Crypto</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= LOADING SCREEN (SESI 3) ================= -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-box">
+            <div class="loading-logo">M</div>
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Memuat Majalaya Crypto...</div>
+        </div>
+    </div>
+
+    <div class="flash-stack">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+    </div>
+
+    <div class="auth-shell">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <div class="mark">M</div>
+                <div class="name">Majalaya Crypto</div>
+            </div>
+
+            {% if mode == 'admin' %}
+                <span class="mode-pill">🔑 Mode Admin</span>
+            {% else %}
+                <span class="mode-pill">👥 Mode User / Guest</span>
+            {% endif %}
+
+            <h1 class="auth-title">Masuk ke akun kamu</h1>
+            <p class="auth-subtitle">
+                {% if mode == 'admin' %}
+                    Masuk menggunakan kredensial Master Control.
+                {% else %}
+                    Masuk untuk melihat saldo dan portofolio simulasimu.
+                {% endif %}
+            </p>
+
+            <form method="POST">
+                <div class="field">
+                    <label>Username</label>
+                    <input type="text" name="username" placeholder="{{ 'superadmin_majalaya' if mode == 'admin' else 'username kamu' }}" required autofocus>
+                </div>
+                <div class="field">
+                    <label>Password</label>
+                    <input type="password" name="password" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+
+            <div class="auth-switch">
+                Belum punya akun? <a href="{{ url_for('register') }}">Daftar di sini</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Loading screen: sembunyikan begitu halaman siap, tampilkan lagi
+        // saat form login disubmit (menuju dashboard).
+        const overlay = document.getElementById('loadingOverlay');
+        window.addEventListener('load', () => {
+            setTimeout(() => overlay.classList.add('hidden'), 350);
+        });
+        document.querySelector('form').addEventListener('submit', () => {
+            overlay.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>

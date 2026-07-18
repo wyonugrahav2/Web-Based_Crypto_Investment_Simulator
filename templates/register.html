@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Daftar - Majalaya Crypto</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= LOADING SCREEN (SESI 3) ================= -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-box">
+            <div class="loading-logo">M</div>
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Memuat Majalaya Crypto...</div>
+        </div>
+    </div>
+
+    <div class="flash-stack">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+    </div>
+
+    <div class="auth-shell">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <div class="mark">M</div>
+                <div class="name">Majalaya Crypto</div>
+            </div>
+
+            <h1 class="auth-title">Buat akun baru</h1>
+            <p class="auth-subtitle">Daftar sekarang dan dapatkan gacha saldo awal fiktif Rp50 Jt – Rp500 Jt.</p>
+
+            <form method="POST">
+                <div class="field">
+                    <label>Username</label>
+                    <input type="text" name="username" placeholder="pilih username unik" required autofocus>
+                </div>
+                <div class="field">
+                    <label>Password</label>
+                    <input type="password" name="password" placeholder="buat password" required>
+                </div>
+                <button type="submit" class="btn-primary">Daftar</button>
+            </form>
+
+            <div class="auth-switch">
+                Sudah punya akun? <a href="{{ url_for('login') }}">Login di sini</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const overlay = document.getElementById('loadingOverlay');
+        window.addEventListener('load', () => {
+            setTimeout(() => overlay.classList.add('hidden'), 350);
+        });
+        document.querySelector('form').addEventListener('submit', () => {
+            overlay.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>

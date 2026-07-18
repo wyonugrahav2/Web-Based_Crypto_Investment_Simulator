@@ -1,0 +1,20 @@
+# ============================================================
+# requirements.txt - Majalaya Crypto
+# ============================================================
+# Instalasi:
+#   pip install -r requirements.txt
+#
+# Catatan:
+# - sqlite3, csv, io, json, os, random, dan datetime adalah modul bawaan
+#   (built-in) Python, sehingga TIDAK perlu (dan tidak bisa) diinstal lewat
+#   pip. Modul-modul tersebut otomatis tersedia selama Python-nya sendiri
+#   terinstal (disarankan Python 3.9 ke atas).
+# - gunicorn disertakan sebagai web server production-grade untuk deployment
+#   di server Linux/VPS. Untuk deployment ke Vercel, gunicorn tidak dipakai
+#   karena Vercel menjalankan aplikasi lewat runtime WSGI serverless-nya
+#   sendiri (lihat vercel.json), tapi paket ini tetap aman untuk diinstal.
+# ============================================================
+
+Flask==3.1.3
+Werkzeug==3.1.7
+gunicorn==23.0.0

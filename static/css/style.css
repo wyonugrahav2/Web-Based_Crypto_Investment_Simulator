@@ -1,0 +1,942 @@
+/* ============================================================
+   MAJALAYA CRYPTO - DESIGN TOKENS (Full Dark Mode)
+   [DISTRIBUSI KODE] @import Google Fonts di bawah ini SENGAJA dipertahankan
+   (tidak dihapus) meskipun templates/base.html sekarang juga memuat CDN
+   Google Fonts lewat <link> sendiri -- supaya templates/login.html dan
+   templates/register.html (yang berdiri sendiri, tidak extends base.html,
+   dan link langsung ke style.css) tetap mendapat font yang sama tanpa
+   perlu ikut di-refactor. Browser akan otomatis dedupe permintaan yang
+   sama, jadi tidak ada biaya tambahan berarti di halaman yang extends base.
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
+
+:root {
+    --bg-base: #0a0d14;
+    --bg-panel: #12161f;
+    --bg-panel-alt: #191e2b;
+    --border: #232838;
+    --border-soft: #1b202c;
+    --text-primary: #eaecf2;
+    --text-muted: #838c9e;
+    --text-faint: #545b6b;
+    --accent-gold: #f0b429;
+    --accent-gold-dim: #7a5c17;
+    --accent-teal: #2dd4bf;
+    --accent-red: #f2545b;
+    --sidebar-w: 248px;
+    --sidebar-w-collapsed: 76px;
+    --radius: 14px;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; }
+
+/* ---------- Flash messages (Dipindahkan ke Tengah Atas agar tidak menutupi profil) ---------- */
+.flash-stack {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%); /* Trik CSS agar box notifikasi pas presisi di tengah layar */
+    z-index: 9999;               /* z-index dinaikkan maksimal agar melayang di atas semua komponen */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    max-width: 420px;            /* Diperlebar sedikit agar teks pecahan desimal panjang tidak terpotong */
+    text-align: center;
+}
+.flash {
+    position: relative; /* [HOTFIX] jadi acuan posisi tombol close (x) */
+    padding: 12px 34px 12px 20px; /* [HOTFIX] tambah ruang kanan untuk tombol close */
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: rgba(18, 22, 31, 0.95); /* Sedikit transparansi mewah dengan efek blur */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: toastSlideDown 0.3s ease-out; /* Efek transisi halus turun dari atas */
+    transition: opacity 0.4s ease, max-height 0.4s ease, padding 0.4s ease, margin 0.4s ease; /* [HOTFIX] transisi fade-out halus */
+}
+
+/* [HOTFIX] Dipakai lewat JS untuk fade-out halus sebelum elemen dihapus,
+   baik karena auto-dismiss (setTimeout) maupun diklik tombol close manual. */
+.flash.flash-dismiss {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* [HOTFIX] Tombol close (x) kecil di pojok kanan tiap banner notifikasi */
+.flash-close-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.55;
+    border-radius: 6px;
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+.flash-close-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Animasi pemanis saat notifikasi muncul */
+@keyframes toastSlideDown {
+    from { transform: translate(-50%, -20px); opacity: 0; }
+    to   { transform: translate(-50%, 0); opacity: 1; }
+}
+.flash-success { border-color: rgba(45,212,191,0.5); color: var(--accent-teal); }
+.flash-danger  { border-color: rgba(242,84,91,0.5); color: var(--accent-red); }
+.flash-info    { border-color: rgba(240,180,41,0.5); color: var(--accent-gold); }
+
+/* ============================================================
+   AUTH PAGES (login & register)
+   ============================================================ */
+.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at 15% 20%, rgba(240,180,41,0.08), transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(45,212,191,0.08), transparent 40%),
+        var(--bg-base);
+    padding: 24px;
+}
+.auth-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px 32px;
+}
+.auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+}
+.auth-brand .mark {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent-gold), #b9821e);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; color: #1a1305;
+}
+.auth-brand .name { font-family: var(--font-display); font-weight: 600; font-size: 17px; }
+.auth-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+.auth-subtitle { color: var(--text-muted); font-size: 13px; margin: 0 0 24px; }
+
+.field { margin-bottom: 16px; }
+.field label {
+    display: block; font-size: 12px; color: var(--text-muted);
+    margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.field input {
+    width: 100%; padding: 11px 14px;
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.field input:focus { border-color: var(--accent-gold); }
+
+.btn-primary {
+    width: 100%; padding: 12px;
+    background: var(--accent-gold);
+    color: #1a1305;
+    border: none; border-radius: 9px;
+    font-weight: 600; font-size: 14px;
+    margin-top: 4px;
+}
+.btn-primary:hover { background: #f5c34a; }
+
+.auth-switch {
+    text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted);
+}
+.auth-switch a { color: var(--accent-gold); font-weight: 500; }
+
+.mode-pill {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    margin-bottom: 14px;
+}
+
+/* ============================================================
+   DASHBOARD SHELL (sidebar + navbar + content)
+   ============================================================ */
+.shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.2s ease;
+    overflow-x: hidden;
+}
+.shell.sidebar-collapsed .sidebar { width: var(--sidebar-w-collapsed); }
+
+.sidebar-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 20px 20px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+.sidebar-brand .mark {
+    width: 32px; height: 32px; flex-shrink: 0;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent-gold), #b9821e);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; color: #1a1305; font-size: 14px;
+}
+.sidebar-brand .name { font-family: var(--font-display); font-weight: 600; font-size: 16px; }
+.shell.sidebar-collapsed .sidebar-brand .name { display: none; }
+
+.sidebar-section-label {
+    padding: 18px 20px 8px;
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-faint); white-space: nowrap;
+}
+.shell.sidebar-collapsed .sidebar-section-label { display: none; }
+
+.nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 20px;
+    color: var(--text-muted);
+    font-size: 13.5px; font-weight: 500;
+    border-left: 2px solid transparent;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.nav-item:hover { color: var(--text-primary); background: var(--bg-panel-alt); }
+.nav-item.active {
+    color: var(--accent-gold);
+    background: rgba(240,180,41,0.06);
+    border-left-color: var(--accent-gold);
+}
+.nav-item .icon { width: 18px; text-align: center; flex-shrink: 0; }
+.shell.sidebar-collapsed .nav-item span.label { display: none; }
+
+.nav-item-admin {
+    color: var(--accent-gold);
+}
+.nav-item-admin:hover { background: rgba(240,180,41,0.08); }
+.nav-item-admin.active {
+    background: rgba(240,180,41,0.12);
+    border-left-color: var(--accent-gold);
+}
+
+/* ---------- Top navbar ---------- */
+.topbar {
+    height: 66px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-base);
+    position: sticky; top: 0; z-index: 20;
+    gap: 16px;
+}
+.topbar-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+
+.icon-btn {
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--accent-gold); border-color: var(--accent-gold-dim); }
+
+.search-box {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 0 14px;
+    height: 38px;
+    max-width: 320px;
+    width: 100%;
+}
+.search-box input {
+    background: transparent; border: none; outline: none;
+    color: var(--text-primary); font-size: 13px; width: 100%;
+}
+.search-box input::placeholder { color: var(--text-faint); }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.notif-dot {
+    position: absolute; top: 7px; right: 7px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent-red);
+    border: 1.5px solid var(--bg-base);
+}
+.icon-btn-wrap { position: relative; }
+
+/* ---------- Profile dropdown (PATEN untuk semua role) ---------- */
+.profile-dd { position: relative; }
+.profile-trigger {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px 5px 5px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+}
+.profile-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-teal), #0f8a7c);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 600; font-size: 12px; color: #04231f;
+    flex-shrink: 0;
+}
+.profile-name { font-size: 13px; font-weight: 500; }
+.role-tag {
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--accent-gold); background: rgba(240,180,41,0.1);
+    padding: 1px 6px; border-radius: 5px; margin-left: 2px;
+}
+.role-tag.role-tag-user {
+    color: var(--accent-teal); background: rgba(45,212,191,0.1);
+}
+
+.dropdown-menu-custom {
+    position: absolute; right: 0; top: calc(100% + 8px);
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-width: 210px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+    overflow: hidden;
+    display: none;
+    z-index: 30;
+}
+.dropdown-menu-custom.open { display: block; }
+.dropdown-menu-custom a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 16px;
+    font-size: 13px; color: var(--text-primary);
+    border-bottom: 1px solid var(--border-soft);
+}
+.dropdown-menu-custom a:last-child { border-bottom: none; }
+.dropdown-menu-custom a:hover { background: var(--bg-panel); }
+.dropdown-menu-custom a.danger { color: var(--accent-red); }
+.dropdown-menu-custom a.gold { color: var(--accent-gold); }
+
+/* ---------- Content ---------- */
+.content { flex: 1; padding: 24px; min-width: 0; }
+
+.page-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 8px;
+}
+.page-header h1 { font-family: var(--font-display); font-size: 22px; margin: 0; }
+.page-header .sub { color: var(--text-muted); font-size: 13px; }
+
+/* ---------- Ticker strip (signature element) ---------- */
+.ticker-strip {
+    display: flex; gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 20px;
+}
+.ticker-chip {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+}
+.ticker-chip .coin-name { font-size: 12px; color: var(--text-muted); }
+.ticker-chip .coin-price { font-family: var(--font-mono); font-size: 13.5px; font-weight: 600; }
+
+/* ============================================================
+   SESI 3 — IKON CRYPTO ASLI (menggantikan huruf bulat statis)
+   Logo resmi tiap koin dimuat lewat CDN sebagai gambar SVG berwarna.
+   Fallback huruf bulat (coin-dot) lama TETAP dipertahankan di DOM dan
+   akan otomatis muncul kembali lewat onerror="" kalau ikon gagal dimuat,
+   supaya tampilan tidak pernah kosong / rusak.
+   ============================================================ */
+.coin-icon-wrap {
+    width: 26px; height: 26px;
+    flex-shrink: 0;
+    display: inline-flex;
+    position: relative;
+}
+.coin-icon-img {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--bg-panel-alt);
+    object-fit: contain;
+    padding: 2px;
+}
+.coin-icon-wrap-sm .coin-icon-img,
+.coin-icon-wrap-sm .coin-dot {
+    width: 22px; height: 22px;
+}
+.coin-dot {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-weight: 600; font-size: 11px;
+    background: var(--bg-panel-alt); color: var(--accent-gold);
+}
+.coin-name-cell {
+    display: flex; align-items: center; gap: 10px;
+}
+
+/* ---------- Cards grid ---------- */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 18px;
+}
+.card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+}
+.card-title {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); margin: 0 0 14px;
+}
+
+.col-3 { grid-column: span 3; }
+.col-4 { grid-column: span 4; }
+.col-5 { grid-column: span 5; }
+.col-6 { grid-column: span 6; }
+.col-7 { grid-column: span 7; }
+.col-8 { grid-column: span 8; }
+.col-12 { grid-column: span 12; }
+@media (max-width: 900px) {
+    .col-3, .col-4, .col-5, .col-6, .col-7, .col-8, .col-12 { grid-column: span 12; }
+}
+
+/* Balance card */
+.balance-amount {
+    font-family: var(--font-mono); font-size: 30px; font-weight: 600;
+    color: var(--accent-gold); margin: 0 0 4px;
+}
+.balance-sub { color: var(--text-muted); font-size: 12.5px; margin: 0; }
+.balance-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.chip-btn {
+    padding: 9px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--bg-panel-alt); color: var(--text-primary);
+    display: inline-flex; align-items: center; gap: 7px;
+}
+.chip-btn.primary { background: var(--accent-gold); color: #1a1305; border-color: var(--accent-gold); }
+/* [HOTFIX] Status loading LOKAL per-tombol (mis. Ekspor Data Pesan CSV),
+   dipakai sebagai pengganti overlay penuh layar untuk aksi berbasis
+   fetch()+blob yang tidak pernah memicu navigasi/reload halaman. */
+.chip-btn.is-loading { opacity: 0.7; cursor: not-allowed; }
+
+/* Master control (admin only) */
+.master-card {
+    border: 1px solid rgba(240,180,41,0.35);
+    background: linear-gradient(160deg, rgba(240,180,41,0.07), var(--bg-panel));
+}
+.master-card .card-title { color: var(--accent-gold); }
+.stat-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+.stat-row:last-child { border-bottom: none; }
+.stat-row .val { font-family: var(--font-mono); font-weight: 600; }
+
+/* Donut chart (pure CSS conic-gradient) */
+.donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.donut {
+    width: 130px; height: 130px; border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+}
+.donut-hole {
+    width: 78px; height: 78px; border-radius: 50%;
+    background: var(--bg-panel);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.donut-hole .label { font-size: 10px; color: var(--text-muted); }
+.donut-legend { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+
+/* Coin table */
+table.coin-table { width: 100%; border-collapse: collapse; }
+table.coin-table th {
+    text-align: left; font-size: 11px; text-transform: uppercase;
+    color: var(--text-faint); padding: 8px 10px; border-bottom: 1px solid var(--border);
+}
+table.coin-table td { padding: 12px 10px; border-bottom: 1px solid var(--border-soft); font-size: 13.5px; }
+table.coin-table td.mono { font-family: var(--font-mono); }
+.search-hidden { display: none !important; }
+
+/* ============================================================
+   SESI 3 — LOADING SCREEN ANIMATIF
+   ============================================================ */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 13, 20, 0.94);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+.loading-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+.loading-box { text-align: center; }
+.loading-logo {
+    width: 60px; height: 60px;
+    margin: 0 auto 22px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--accent-gold), var(--accent-teal));
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 26px;
+    color: #0a0d14;
+    animation: loadingPulse 1.4s ease-in-out infinite;
+    box-shadow: 0 0 40px rgba(240, 180, 41, 0.25);
+}
+.loading-spinner {
+    width: 34px; height: 34px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent-gold);
+    border-right-color: var(--accent-teal);
+    animation: loadingSpin 0.8s linear infinite;
+}
+.loading-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    animation: loadingTextBlink 1.6s ease-in-out infinite;
+}
+@keyframes loadingSpin { to { transform: rotate(360deg); } }
+@keyframes loadingPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+}
+@keyframes loadingTextBlink {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+
+/* ============================================================
+   SESI 3 — TAB MENU UTAMA (Dashboard / Portofolio / Pengaturan / Admin)
+   ============================================================ */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; animation: tabFadeIn 0.25s ease; }
+@keyframes tabFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   SESI 3 — FORM TRADING (Beli / Jual) & PORTOFOLIO
+   ============================================================ */
+.field select {
+    width: 100%; padding: 11px 14px;
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+    appearance: none;
+}
+.field select:focus { border-color: var(--accent-gold); }
+
+.portfolio-table-wrap { overflow-x: auto; margin-bottom: 18px; }
+
+/* Toggle Beli / Jual */
+.trade-tabs {
+    display: flex; gap: 8px;
+    border-top: 1px solid var(--border-soft);
+    padding-top: 18px;
+    margin-top: 4px;
+    margin-bottom: 14px;
+}
+.trade-tab-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 12.5px; font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--bg-panel-alt);
+    color: var(--text-muted);
+    display: inline-flex; align-items: center; gap: 7px;
+}
+.trade-tab-btn.active {
+    background: rgba(240,180,41,0.12);
+    border-color: var(--accent-gold);
+    color: var(--accent-gold);
+}
+.trade-tab-btn[data-aksi="jual"].active {
+    background: rgba(242,84,91,0.1);
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+.trade-form { margin-top: 0; }
+.trade-form-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1.2fr;
+    gap: 14px;
+    align-items: end;
+}
+@media (max-width: 700px) {
+    .trade-form-row { grid-template-columns: 1fr; }
+}
+.trade-form .field { margin-bottom: 0; }
+.trade-btn-row { display: flex; gap: 10px; }
+.trade-btn-row .chip-btn { flex: 1; text-align: center; justify-content: center; }
+.trade-hint {
+    margin: 12px 0 0;
+    font-size: 11.5px;
+    color: var(--text-faint);
+}
+.owned-hint {
+    text-transform: none;
+    font-family: var(--font-mono);
+    color: var(--accent-teal);
+    letter-spacing: 0;
+    font-size: 11px;
+}
+
+.chip-btn.danger-outline {
+    background: transparent;
+    color: var(--accent-red);
+    border-color: rgba(242, 84, 91, 0.4);
+}
+.chip-btn.danger-outline:hover {
+    background: rgba(242, 84, 91, 0.1);
+}
+
+/* Highlight singkat saat harga koin baru saja diperbarui via AJAX */
+.price-cell.flash-update {
+    animation: priceFlash 0.9s ease;
+    border-radius: 6px;
+}
+@keyframes priceFlash {
+    0%   { background: rgba(45, 212, 191, 0.28); }
+    100% { background: transparent; }
+}
+
+/* ============================================================
+   SESI 3 MEGA UPDATE — LINE CHART TREN PASAR (BTC)
+   ============================================================ */
+.chart-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.chart-live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--accent-teal);
+    background: rgba(45,212,191,0.1);
+    border: 1px solid rgba(45,212,191,0.35);
+    padding: 4px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.chart-live-badge i { font-size: 7px; animation: liveDotPulse 1.4s ease-in-out infinite; }
+@keyframes liveDotPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+.chart-canvas-wrap { position: relative; height: 260px; width: 100%; }
+
+/* ============================================================
+   SESI 3 MEGA UPDATE — QUICK EXCHANGE (TUKAR KILAT)
+   ============================================================ */
+.quick-exchange-card { display: flex; flex-direction: column; }
+.qe-box {
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+.qe-box label {
+    display: block; font-size: 11px; color: var(--text-muted);
+    margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.qe-row { display: flex; gap: 10px; }
+.qe-select {
+    flex: 0 0 100px;
+    padding: 9px 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+.qe-input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+}
+.qe-input:focus { border-color: var(--accent-teal); }
+.qe-input:disabled { color: var(--text-muted); }
+.qe-swap-icon {
+    width: 34px; height: 34px;
+    margin: 10px auto;
+    border-radius: 50%;
+    background: var(--accent-teal);
+    color: #04231f;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+}
+.qe-submit-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: 16px;
+    background: var(--accent-teal);
+    border-color: var(--accent-teal);
+    color: #04231f;
+    font-weight: 600;
+}
+.qe-submit-btn:hover { background: #3ee6cf; }
+
+/* ============================================================
+   SESI 3 MEGA UPDATE — RECENT ACTIVITIES (STATUS & TIPE BADGE)
+   ============================================================ */
+.status-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 4px 11px;
+    border-radius: 999px;
+    letter-spacing: 0.03em;
+}
+.status-completed {
+    color: #04231f;
+    background: var(--accent-teal);
+}
+.status-suspended {
+    color: #2a0a0c;
+    background: var(--accent-red);
+}
+.tipe-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    padding: 4px 10px; border-radius: 8px;
+}
+.tipe-beli { color: var(--accent-gold); background: rgba(240,180,41,0.1); }
+.tipe-jual { color: var(--accent-red); background: rgba(242,84,91,0.1); }
+.tipe-tukar { color: var(--accent-teal); background: rgba(45,212,191,0.1); }
+
+/* ============================================================
+   SESI 3 MEGA UPDATE — DEVELOPER OPTIONS (ADMIN PENGATURAN)
+   ============================================================ */
+.dev-status-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px;
+    margin: 14px 0 18px;
+}
+
+/* ============================================================
+   SESI 4 — WIDGET P&L GLOBAL (Total Saldo)
+   ============================================================ */
+.pnl-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 700;
+    margin: 8px 0 0;
+}
+.pnl-arrow { font-size: 11px; }
+.pnl-indicator.pnl-positive { color: var(--accent-teal); }
+.pnl-indicator.pnl-negative { color: var(--accent-red); }
+.pnl-label { color: var(--text-faint); font-weight: 400; margin-left: 2px; }
+
+/* ============================================================
+   SESI 4 — SOCIAL TRADING FEED
+   ============================================================ */
+.social-feed-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.feed-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    background: var(--bg-panel-alt);
+}
+.feed-avatar {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent-gold), #b9821e);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 13px;
+    color: #1a1305;
+}
+.feed-body { flex: 1; min-width: 0; }
+.feed-text { margin: 0 0 4px; font-size: 13px; line-height: 1.55; color: var(--text-primary); }
+.feed-time { margin: 0; font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); }
+.feed-pnl-badge {
+    display: inline-block; margin-left: 6px; padding: 1px 7px;
+    border-radius: 6px; font-family: var(--font-mono); font-size: 10.5px;
+    vertical-align: middle;
+}
+.feed-pnl-badge.pnl-positive { color: var(--accent-teal); background: rgba(45,212,191,0.1); }
+.feed-pnl-badge.pnl-negative { color: var(--accent-red); background: rgba(242,84,91,0.1); }
+.feed-delete-form { flex-shrink: 0; }
+.feed-delete-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-faint);
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.15s;
+}
+.feed-delete-btn:hover { border-color: var(--accent-red); color: var(--accent-red); }
+
+/* ============================================================
+   SESI 4 — EDIT PROFIL & FOTO PROFIL DINAMIS
+   ============================================================ */
+.profile-avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+
+.profil-preview-row { margin-bottom: 8px; }
+.profil-preview-avatar {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border);
+}
+
+/* ============================================================
+   SESI 4 — SPARKLINE MINI (WIDGET TOTAL SALDO)
+   ============================================================ */
+.sparkline-wrap { margin-top: 12px; height: 40px; width: 100%; }
+
+/* ============================================================
+   SESI 4 — SOCIAL TRADING FEED: LIKE, KOMENTAR & REPLY THREAD
+   ============================================================ */
+.feed-interaction-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px;
+}
+.feed-like-btn, .feed-comment-toggle-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px;
+    border-radius: 20px;
+    border: 1px solid var(--border-soft);
+    background: var(--bg-panel);
+    color: var(--text-faint);
+    font-size: 11.5px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: 0.15s;
+}
+.feed-like-btn:hover, .feed-comment-toggle-btn:hover { border-color: var(--accent-teal); color: var(--text-primary); }
+.feed-like-btn.liked { color: var(--accent-red); border-color: var(--accent-red); background: rgba(242,84,91,0.08); }
+.feed-like-btn.liked i { color: var(--accent-red); }
+
+.feed-comment-panel {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border-soft);
+}
+.feed-comment-form {
+    display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px;
+}
+.feed-comment-form textarea {
+    flex: 1; resize: vertical; min-height: 34px;
+    padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg-panel);
+    color: var(--text-primary); font-size: 12.5px; font-family: var(--font-body);
+}
+.feed-comment-submit-btn { flex-shrink: 0; padding: 8px 14px; }
+
+.comment-thread { display: flex; flex-direction: column; gap: 10px; }
+.comment-thread-reply { margin-top: 10px; margin-left: 28px; padding-left: 12px; border-left: 2px solid var(--border-soft); }
+.comment-item { display: flex; align-items: flex-start; gap: 10px; }
+.comment-avatar {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent-teal), #16897c);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 11px;
+    color: #04211d;
+}
+.comment-body { flex: 1; min-width: 0; }
+.comment-meta { margin: 0; font-size: 12px; color: var(--text-primary); }
+.comment-time { font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); margin-left: 4px; }
+.comment-text { margin: 2px 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--text-primary); word-break: break-word; }
+.comment-actions { display: flex; gap: 12px; }
+.comment-reply-btn, .comment-delete-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 11px; font-weight: 600; color: var(--text-faint);
+    padding: 0;
+}
+.comment-reply-btn:hover { color: var(--accent-teal); }
+.comment-delete-btn:hover { color: var(--accent-red); }
+.comment-reply-form-wrap { margin-top: 8px; }
