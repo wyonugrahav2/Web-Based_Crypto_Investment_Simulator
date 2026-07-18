@@ -152,6 +152,22 @@ berjalan otomatis mengikuti konfigurasi tersebut.
 Setiap user baru akan mendapatkan saldo awal acak (antara Rp50.000.000 s.d.
 Rp500.000.000) sebagai modal simulasi.
 
+## 👥 Daftar Akun Demo (Siap Pakai untuk Pengujian)
+
+Dikarenakan lingkungan *Cloud Serverless* (Vercel) bersifat *Read-Only* untuk database SQLite lokal, fitur registrasi akun baru dinonaktifkan di versi *live web*. 
+
+Untuk keperluan pengujian sistem dan *Master Control*, silakan gunakan daftar akun *dummy* yang sudah tertanam di dalam database berikut:
+
+| No | Role | Username | Password |
+| :--- | :--- | :--- | :--- |
+| - | **Super Admin** | `superadmin_majalaya` | *(Gunakan password admin Anda)* |
+| 1 | User / Guest | `herlambang` | `Herlambang99!` |
+| 2 | User / Guest | `cecep_crypto` | `CecepGacor123` |
+| 3 | User / Guest | `saber_alter` | `ExcaliburMorgan88` |
+| 4 | User / Guest | `ado_fanboy` | `Readymade2026` |
+| 5 | User / Guest | `adele_rolling` | `DeepInTheSide8` |
+| 6 | User / Guest | `danu_invest` | `CuanSahamKripto` |
+| 7 | User / Guest | `wytta_tester` | `JouhouSMP777` |
 ---
 
 ## 🛠️ Teknologi yang Digunakan
